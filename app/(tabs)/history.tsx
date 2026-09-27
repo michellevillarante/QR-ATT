@@ -4,160 +4,70 @@ import { FlatList, StyleSheet, Text, View } from 'react-native';
 
 import { COLORS } from '@/constants/colors';
 import { useAuth } from '@/lib/auth';
-import {
-  getAttendanceHistory,
-  getTeacherEventAttendance,
-  type AttendanceRecord,
-  type TeacherEventAttendance,
-} from '@/lib/attendance';
-import { getProfile, type Role } from '@/lib/profiles';
+import { getMyAttendance } from '@/lib/attendance';
+
+type AttendanceRecord = {
+  id: string;
+  event_title?: string;
+  event_code?: string;
+  scanned_at: string;
+};
 
 export default function HistoryScreen() {
   const { user } = useAuth();
-  const [role, setRole] = useState<Role | null>(null);
-  const [studentRecords, setStudentRecords] = useState<AttendanceRecord[]>([]);
-  const [teacherEvents, setTeacherEvents] = useState<TeacherEventAttendance[]>(
-    []
-  );
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    if (!user) {
-      setRole(null);
-      setStudentRecords([]);
-      setTeacherEvents([]);
+  const loadHistory = useCallback(() => {
+    if (!user?.id) {
+      setRecords([]);
       setLoading(false);
       return;
     }
 
-    try {
-      const profile = await getProfile(user.id);
-      const currentRole = profile?.role ?? 'student';
-      setRole(currentRole);
-
-      if (currentRole === 'teacher') {
-        const events = await getTeacherEventAttendance(user.id);
-        setTeacherEvents(events);
-        setStudentRecords([]);
-      } else {
-        const records = await getAttendanceHistory(user.id);
-        setStudentRecords(records);
-        setTeacherEvents([]);
-      }
-    } catch {
-      setStudentRecords([]);
-      setTeacherEvents([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
+    getMyAttendance(user.id)
+      .then((rows) => {
+        setRecords(rows);
+        setLoading(false);
+      })
+      .catch(() => {
+        setRecords([]);
+        setLoading(false);
+      });
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
-      load();
-    }, [load])
+      loadHistory();
+    }, [loadHistory])
   );
-
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Attendance History</Text>
-        <Text style={styles.subtitle}>Loading records...</Text>
-      </View>
-    );
-  }
-
-  if (role === 'teacher') {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Attendance History</Text>
-
-        {teacherEvents.length === 0 ? (
-          <Text style={styles.subtitle}>
-            No events yet. Create an event from the Teacher tab to start
-            collecting attendance.
-          </Text>
-        ) : (
-          <FlatList
-            data={teacherEvents}
-            keyExtractor={(item) => item.eventId}
-            contentContainerStyle={styles.list}
-            renderItem={({ item }) => (
-              <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.eventTitle}>{item.title}</Text>
-                  <View style={styles.countBadge}>
-                    <Text style={styles.countBadgeText}>
-                      {item.attendeeCount}
-                    </Text>
-                  </View>
-                </View>
-
-                <Text style={styles.eventMeta}>{item.eventCode}</Text>
-                {item.startTime ? (
-                  <Text style={styles.eventMeta}>
-                    Starts {formatDate(item.startTime)}
-                  </Text>
-                ) : null}
-
-                <View style={styles.attendeeList}>
-                  {item.attendees.length === 0 ? (
-                    <Text style={styles.eventMeta}>No scans yet.</Text>
-                  ) : (
-                    item.attendees.map((attendee) => (
-                      <View
-                        key={attendee.studentId}
-                        style={styles.attendeeRow}
-                      >
-                        <Text style={styles.attendeeName}>
-                          {attendee.studentName?.trim()
-                            ? attendee.studentName
-                            : shortId(attendee.studentId)}
-                        </Text>
-                        <Text style={styles.attendeeTime}>
-                          {formatDate(attendee.scannedAt)}
-                        </Text>
-                      </View>
-                    ))
-                  )}
-                </View>
-              </View>
-            )}
-          />
-        )}
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Attendance History</Text>
 
-      {studentRecords.length === 0 ? (
+      {loading ? (
+        <Text style={styles.subtitle}>Loading records...</Text>
+      ) : records.length === 0 ? (
         <Text style={styles.subtitle}>
           No records yet. Scan a QR code to register your attendance.
         </Text>
       ) : (
         <FlatList
-          data={studentRecords}
+          data={records}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
             <View style={styles.card}>
-              <Text style={styles.eventTitle}>{item.eventTitle}</Text>
-              <Text style={styles.eventMeta}>{item.eventId}</Text>
-              <Text style={styles.eventMeta}>{formatDate(item.scannedAt)}</Text>
+              <Text style={styles.eventTitle}>{item.event_title ?? 'Event'}</Text>
+              <Text style={styles.eventMeta}>{item.event_code ?? 'Event'}</Text>
+              <Text style={styles.eventMeta}>{formatDate(item.scanned_at)}</Text>
             </View>
           )}
         />
       )}
     </View>
   );
-}
-
-function shortId(id: string) {
-  return id ? `...${id.slice(-8)}` : 'unknown';
 }
 
 function formatDate(iso: string) {
@@ -198,57 +108,15 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
   eventTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.textPrimary,
     marginBottom: 4,
-    flexShrink: 1,
-    marginRight: 8,
   },
   eventMeta: {
     fontSize: 13,
     color: COLORS.textSecondary,
     marginTop: 2,
-  },
-  countBadge: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 999,
-    minWidth: 28,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    alignItems: 'center',
-  },
-  countBadgeText: {
-    color: COLORS.textOnPrimary,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  attendeeList: {
-    marginTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: 8,
-  },
-  attendeeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 6,
-  },
-  attendeeName: {
-    fontSize: 14,
-    color: COLORS.textPrimary,
-    flexShrink: 1,
-    marginRight: 8,
-  },
-  attendeeTime: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
   },
 });

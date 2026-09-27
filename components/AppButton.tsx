@@ -12,43 +12,40 @@ type Props = {
 };
 
 export default function AppButton({ title, icon, theme, onPress, disabled = false }: Props) {
-  if (theme === 'primary') {
-    return (
-      <View
-        style={[
-          styles.buttonOuter,
-          { borderWidth: 3, borderColor: COLORS.primary, borderRadius: 18 },
-        ]}
-      >
-        <Pressable
-          style={[styles.buttonInner, { backgroundColor: COLORS.primary }]}
-          onPress={onPress}
-          disabled={disabled}
-        >
-          <Ionicons
-            name={icon}
-            size={22}
-            color={disabled ? COLORS.textSecondary : COLORS.textOnPrimary}
-            style={styles.icon}
-          />
-          <Text style={[styles.label, { color: disabled ? COLORS.textSecondary : COLORS.textOnPrimary }]}>
-            {title}
-          </Text>
-        </Pressable>
-      </View>
-    );
-  }
+  const isPrimary = theme === 'primary';
 
   return (
     <View style={styles.buttonOuter}>
-      <Pressable style={styles.buttonInner} onPress={onPress} disabled={disabled}>
+      <Pressable
+        style={[
+          styles.buttonInner,
+          isPrimary ? styles.primaryFill : styles.secondaryFill,
+          disabled && styles.disabledFill,
+        ]}
+        onPress={onPress}
+        disabled={disabled}
+      >
         <Ionicons
           name={icon}
           size={22}
-          color={COLORS.textSecondary}
+          color={
+            disabled
+              ? COLORS.textSecondary
+              : isPrimary
+                ? COLORS.textOnPrimary
+                : COLORS.textSecondary
+          }
           style={styles.icon}
         />
-        <Text style={styles.label}>{title}</Text>
+        <Text
+          style={[
+            styles.label,
+            isPrimary && styles.labelPrimary,
+            { color: disabled ? COLORS.textSecondary : isPrimary ? COLORS.textOnPrimary : COLORS.textPrimary },
+          ]}
+        >
+          {title}
+        </Text>
       </Pressable>
     </View>
   );
@@ -60,19 +57,27 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   buttonInner: {
-    borderRadius: 14,
+    borderRadius: 10,
     paddingVertical: 16,
     paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
+  },
+  primaryFill: {
+    backgroundColor: COLORS.primary,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  secondaryFill: {
     backgroundColor: COLORS.card,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  disabledFill: {
+    opacity: 0.7,
   },
   icon: { paddingRight: 10 },
   label: { fontSize: 17, fontWeight: '600', color: COLORS.textPrimary },
+  labelPrimary: { fontWeight: '700' },
 });

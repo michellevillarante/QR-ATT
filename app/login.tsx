@@ -18,7 +18,6 @@ import AppButton from '@/components/AppButton';
 import Header from '@/components/Header';
 import { COLORS } from '@/constants/colors';
 import { signIn } from '@/lib/auth';
-import { getProfile } from '@/lib/profiles';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -38,19 +37,7 @@ export default function LoginScreen() {
       if (authError) {
         setError(authError.message);
       } else {
-        // Teachers land in the create-events section; students on Home.
-        const profile = data.session
-          ? await getProfile(data.session.user.id)
-          : null;
-        const metadataRole =
-          (data.session?.user?.user_metadata?.role as
-            | 'student'
-            | 'teacher'
-            | undefined) ?? null;
-        const finalRole = profile?.role ?? metadataRole ?? 'student';
-        router.replace(
-          finalRole === 'teacher' ? '/(tabs)/teacher' : '/(tabs)'
-        );
+        router.replace('/(tabs)');
       }
     } catch (err: any) {
       setError(err?.message || 'Unexpected error');
@@ -141,21 +128,20 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   headerContainer: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginTop: 20,
     marginBottom: 16,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
     color: COLORS.textPrimary,
-    textAlign: 'center',
     marginBottom: 4,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 15,
     color: COLORS.textSecondary,
-    textAlign: 'center',
+    lineHeight: 21,
     marginBottom: 32,
   },
   form: {
@@ -170,18 +156,18 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: COLORS.card,
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: COLORS.border,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 15,
+    fontSize: 16,
     color: COLORS.textPrimary,
   },
   error: {
     fontSize: 14,
-    color: '#C62828',
-    textAlign: 'center',
+    color: COLORS.danger,
+    textAlign: 'left',
     marginTop: 12,
     marginBottom: 4,
   },
@@ -191,7 +177,7 @@ const styles = StyleSheet.create({
   link: {
     fontSize: 14,
     color: COLORS.primary,
-    textAlign: 'center',
+    textAlign: 'left',
     fontWeight: '600',
   },
 });

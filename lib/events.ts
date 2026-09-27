@@ -1,83 +1,62 @@
 import { supabase } from './supabase';
 
-export type Event = {
-  eventId: string;
-  title: string;
-  start: string;
-  end: string;
-};
-
-export type CloudEvent = {
+export type EventRecord = {
   id: string;
   event_code: string;
   title: string;
-  start_time: string | null;
-  end_time: string | null;
+  start_time: string;
+  end_time: string;
   created_by: string | null;
   created_at: string;
 };
 
-export async function createEvent(
-  event: Event
-): Promise<{ error: string | null }> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export type EventInput = {
+  event_code: string;
+  title: string;
+  start_time: string;
+  end_time: string;
+};
 
-  const { error } = await supabase.from('events').upsert(
-    {
-      event_code: event.eventId,
-      title: event.title,
-      start_time: event.start || null,
-      end_time: event.end || null,
-      created_by: user?.id ?? null,
-    },
-    { onConflict: 'event_code' }
-  );
+export async function createEvent(event: EventInput): Promise<EventRecord> {
+  const { data, error } = await supabase
+    .from('events')
+    .insert({
+      ...event,
+      created_by: (await supabase.auth.getUser()).data.user?.id ?? null,
+    })
+    .select()
+    .single();
 
   if (error) {
-    const missingTable =
-      error.code === '42P01' ||
-      /table .*events.*does not exist|event.*does not exist/i.test(error.message);
-
-    return {
-      error: missingTable
-        ? 'Event table is missing. Run the SQL in supabase/schema.sql in Supabase SQL Editor.'
-        : error.message,
-    };
+    throw error;
   }
 
-  return { error: null };
+  return data as EventRecord;
 }
 
-export async function getEventsByTeacher(
-  teacherId: string
-): Promise<CloudEvent[]> {
+export async function getEvents(): Promise<EventRecord[]> {
   const { data, error } = await supabase
     .from('events')
     .select('*')
-    .eq('created_by', teacherId)
     .order('created_at', { ascending: false });
 
-  if (error || !data) {
-    return [];
+  if (error) {
+    throw error;
   }
 
-  return data as CloudEvent[];
+  return (data ?? []) as EventRecord[];
 }
 
-export async function getEventByCode(
-  code: string
-): Promise<CloudEvent | null> {
+export async function getEventByCode(eventCode: string): Promise<EventRecord | null> {
   const { data, error } = await supabase
     .from('events')
     .select('*')
-    .eq('event_code', code)
+    .eq('event_code', eventCode)
     .maybeSingle();
 
-  if (error || !data) {
-    return null;
+  if (error) {
+    throw error;
   }
 
-  return data as CloudEvent;
+  return data as EventRecord | null;
 }

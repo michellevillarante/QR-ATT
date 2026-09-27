@@ -1,66 +1,39 @@
-import { useEffect } from 'react';
+import { Redirect, Stack, useSegments } from 'expo-router';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { Stack, usePathname, useRouter } from 'expo-router';
 
 import { COLORS } from '@/constants/colors';
-import { initAuth, useAuth } from '@/lib/auth';
-import { getProfile } from '@/lib/profiles';
-
-const AUTH_PATHS = ['/login', '/register'];
+import { useAuth } from '@/lib/auth';
 
 export default function RootLayout() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const { user, initialized } = useAuth();
+  const { session, loading } = useAuth();
+  const segments = useSegments();
 
-  useEffect(() => {
-    initAuth();
-  }, []);
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
 
-  useEffect(() => {
-    if (!initialized) return;
-
-    const onAuthScreen = AUTH_PATHS.includes(pathname);
-
-    if (!user && !onAuthScreen) {
-      router.replace('/login');
-    } else if (user && onAuthScreen) {
-      // Role-aware landing: teachers go to the create-events section,
-      // students to Home. (getProfile is async; the auth screens do their
-      // own replace afterwards — both target the same place.)
-      getProfile(user.id).then((profile) => {
-        router.replace(
-          profile?.role === 'teacher' ? '/(tabs)/teacher' : '/(tabs)'
-        );
-      });
-    }
-  }, [initialized, user, pathname, router]);
+  const path = segments?.[0];
+  const inAuthGroup = path === 'login' || path === 'register';
+  const inTabsGroup = path === '(tabs)';
 
   return (
-    <View style={styles.root}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="register" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" options={{ title: 'Oops! Not Found' }} />
-      </Stack>
-
-      {!initialized && (
-        <View style={styles.loader} pointerEvents="none">
-          <ActivityIndicator size="large" color={COLORS.primary} />
-        </View>
-      )}
-    </View>
+    <Stack screenOptions={{ headerShown: false }}>
+      {!session && inTabsGroup && <Redirect href="/login" />}
+      {session && inAuthGroup && <Redirect href="/(tabs)" />}
+      <Stack.Screen name="login" />
+      <Stack.Screen name="register" />
+      <Stack.Screen name="(tabs)" />
+    </Stack>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  loadingContainer: {
     flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  loader: {
-    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.background,

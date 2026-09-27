@@ -20,13 +20,11 @@ import Header from '@/components/Header';
 import { COLORS } from '@/constants/colors';
 import { signUp } from '@/lib/auth';
 
-type Role = 'student' | 'teacher';
-
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState<Role>('student');
+  const [role, setRole] = useState<'student' | 'teacher'>('student');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -37,7 +35,7 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     setError(null);
 
-    if (!fullName.trim() || !email.trim() || !password || !confirmPassword) {
+    if (!email.trim() || !password || !confirmPassword) {
       setError('All fields are required.');
       return;
     }
@@ -55,29 +53,16 @@ export default function RegisterScreen() {
     setLoading(true);
 
     try {
-      const { data, error: authError, verifiedRole } = await signUp(
-        email.trim(),
-        password,
-        {
-          full_name: fullName.trim(),
-          role,
-        }
-      );
+      const { data, error: authError } = await signUp(email.trim(), password, {
+        full_name: fullName.trim(),
+        role,
+      });
 
       if (authError) {
         setError(authError.message);
       } else if (data.session) {
-        // Email confirmation is off, so a session exists right away.
-        // Teachers go straight to the create-events section; students to Home.
-        const metadataRole =
-          (data.user?.user_metadata?.role as 'student' | 'teacher' | undefined) ??
-          role;
-        const finalRole = verifiedRole ?? metadataRole ?? role;
-        router.replace(
-          finalRole === 'teacher' ? '/(tabs)/teacher' : '/(tabs)'
-        );
+        router.replace('/(tabs)');
       } else {
-        // Email confirmation is on — show the "check your email" message.
         setSuccess(true);
       }
     } catch (err) {
@@ -125,7 +110,7 @@ export default function RegisterScreen() {
                   style={styles.input}
                   value={fullName}
                   onChangeText={setFullName}
-                  placeholder="e.g. Juan Dela Cruz"
+                  placeholder="e.g. Alex Rivera"
                   placeholderTextColor={COLORS.textSecondary}
                   editable={!loading}
                 />
@@ -235,21 +220,20 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   headerContainer: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginTop: 20,
     marginBottom: 16,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
     color: COLORS.textPrimary,
-    textAlign: 'center',
     marginBottom: 4,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 15,
     color: COLORS.textSecondary,
-    textAlign: 'center',
+    lineHeight: 21,
     marginBottom: 32,
   },
   form: {
@@ -264,12 +248,12 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: COLORS.card,
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: COLORS.border,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 15,
+    fontSize: 16,
     color: COLORS.textPrimary,
   },
   roleRow: {
@@ -278,17 +262,17 @@ const styles = StyleSheet.create({
   },
   roleChip: {
     flex: 1,
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    marginRight: 10,
     paddingVertical: 12,
     alignItems: 'center',
-    marginRight: 10,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
   },
   roleChipActive: {
-    borderColor: COLORS.primary,
     backgroundColor: COLORS.primary + '14',
+    borderColor: COLORS.primary,
   },
   roleChipText: {
     fontSize: 15,
@@ -296,13 +280,13 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   roleChipTextActive: {
-    color: COLORS.textPrimary,
+    color: COLORS.primary,
     fontWeight: '700',
   },
   error: {
     fontSize: 14,
-    color: '#C62828',
-    textAlign: 'center',
+    color: COLORS.danger,
+    textAlign: 'left',
     marginTop: 12,
     marginBottom: 4,
   },
@@ -312,15 +296,17 @@ const styles = StyleSheet.create({
   link: {
     fontSize: 14,
     color: COLORS.primary,
-    textAlign: 'center',
+    textAlign: 'left',
     fontWeight: '600',
   },
   successContainer: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 24,
     padding: 20,
     backgroundColor: COLORS.card,
-    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
   },
   successTitle: {
     fontSize: 18,
@@ -331,7 +317,6 @@ const styles = StyleSheet.create({
   successText: {
     fontSize: 14,
     color: COLORS.textSecondary,
-    textAlign: 'center',
     lineHeight: 20,
     marginBottom: 16,
   },

@@ -3,7 +3,9 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
-import { registerAttendance } from '@/lib/attendance';
+import { getEventByCode } from '@/lib/events';
+import { registerAttendanceForUser } from '@/lib/attendance';
+
 
 import AppButton from '@/components/AppButton';
 import { COLORS } from '@/constants/colors';
@@ -15,6 +17,8 @@ export default function ScanScreen() {
   const [lastData, setLastData] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+
 
   if (!permission) {
     return <View style={styles.container} />;
@@ -37,38 +41,65 @@ export default function ScanScreen() {
     );
   }
 
-  const handleBarcodeScanned = ({ data }: { data: string }) => {
-    // Ignore any scan that fires while a previous one is still resolving.
-    if (scanned) return;
-
+  const handleBarcodeScanned = async ({ data }: { data: string }) => {
     setScanned(true);
     setLastData(data);
-    setMessage('Checking QR code...');
-    setSuccess(false);
-
-    const studentId = user?.id;
-    if (!studentId) {
-      setSuccess(false);
-      setMessage('You must be signed in to record attendance.');
-      return;
-    }
-
-    registerAttendance(data, studentId)
-      .then((result) => {
-        setMessage(result.message || 'not QR event code');
-        setSuccess(result.success);
-      })
-      .catch(() => {
-        setMessage('not QR event code');
-        setSuccess(false);
-      });
-  };
-
-  const handleScanAgain = () => {
-    setScanned(false);
-    setLastData(null);
     setMessage(null);
-    setSuccess(false);
+
+    try {
+      const studentId = user?.id;
+      if (!studentId) {
+        setSuccess(false);
+        setMessage('You must be signed in to record attendance.');
+        return;
+      }
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(data);
+      } catch {
+        setSuccess(false);
+        setMessage('Invalid QR code.');
+        return;
+      }
+
+      const eventCode = parsed?.event ?? parsed?.eventId;
+      if (!eventCode) {
+        setSuccess(false);
+        setMessage('Not an attendance QR code.');
+        return;
+      }
+
+      const event = await getEventByCode(eventCode);
+      if (!event) {
+        setSuccess(false);
+        setMessage('Event not found. Please create it first.');
+        return;
+      }
+
+      const now = Date.now();
+      const start = new Date(event.start_time).getTime();
+      const end = new Date(event.end_time).getTime();
+
+      if (now < start) {
+        setSuccess(false);
+        setMessage('Event has not started yet.');
+        return;
+      }
+
+      if (now > end) {
+        setSuccess(false);
+        setMessage('Event has already ended.');
+        return;
+      }
+
+      const result = await registerAttendanceForUser(event.id, studentId);
+      setSuccess(result.success);
+      setMessage(result.message);
+    } catch {
+      setSuccess(false);
+      setMessage('Unable to record attendance. Please try again.');
+    }
   };
 
   return (
@@ -86,15 +117,16 @@ export default function ScanScreen() {
         </Text>
 
         {scanned && message && (
-          <Text
-            style={[styles.scanResult, success ? styles.success : styles.error]}
-          >
-            {message}
-          </Text>
-        )}
+  <Text
+    style={[styles.scanResult, success ? styles.success : styles.error]}
+  >
+    {message}
+  </Text>
+)}
+
 
         {scanned && lastData && (
-          <Text style={styles.scanData}>{lastData}</Text>
+          <Text style={styles.scanResult}>{lastData}</Text>
         )}
 
         {scanned && (
@@ -102,7 +134,11 @@ export default function ScanScreen() {
             theme="primary"
             title="Scan Again"
             icon="refresh"
-            onPress={handleScanAgain}
+            onPress={() => {
+              setScanned(false);
+              setLastData(null);
+              setMessage(null);
+            }}
           />
         )}
       </View>
@@ -151,18 +187,9 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     textAlign: 'center',
   },
-  scanResult: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 8,
-    fontWeight: '600',
-  },
-  success: { color: COLORS.success },
-  error: { color: COLORS.danger },
-  scanData: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
+  scanResult: { fontSize: 14, textAlign: 'center', marginBottom: 8, fontWeight: '600' },
+success:    { color: '#2E7D32' },   // green — attendance recorded
+error:      { color: '#C62828' },   // red — failed / duplicate
+scanData:   { fontSize: 12, color: COLORS.textSecondary, textAlign: 'center', marginBottom: 12 },
+
 });

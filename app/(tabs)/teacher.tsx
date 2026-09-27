@@ -2,9 +2,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import {
-  ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
@@ -14,14 +13,10 @@ import {
   View,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
-import { useFocusEffect } from 'expo-router';
 
 import AppButton from '@/components/AppButton';
 import { COLORS } from '@/constants/colors';
-import { useAuth, syncProfile } from '@/lib/auth';
 import { createEvent } from '@/lib/events';
-import { getProfile, type Role } from '@/lib/profiles';
-import { buildQRPayload } from '@/lib/qr';
 
 function toLocalISO(date: Date) {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -48,9 +43,6 @@ const QUICK_END_OPTIONS = [
 type EditTarget = 'start' | 'end';
 
 export default function TeacherScreen() {
-  const { user, session } = useAuth();
-  const [role, setRole] = useState<Role | null>(null);
-  const [roleLoading, setRoleLoading] = useState(true);
   const [title, setTitle] = useState('');
   const [eventId, setEventId] = useState('');
   const [startDate, setStartDate] = useState(() => new Date());
@@ -61,47 +53,11 @@ export default function TeacherScreen() {
   const [editingPart, setEditingPart] = useState<'date' | 'time'>('date');
   const [payload, setPayload] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [messageError, setMessageError] = useState(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      if (!user) {
-        setRoleLoading(false);
-        return () => {
-          active = false;
-        };
-      }
-      (async () => {
-        let profile = await getProfile(user.id);
-        const metadataRole =
-          (session?.user?.user_metadata?.role as
-            | 'student'
-            | 'teacher'
-            | undefined) ?? null;
-
-        if ((profile?.role ?? 'student') !== 'teacher' && metadataRole !== 'teacher') {
-          // Self-heal: apply the signup intent / metadata, then re-read —
-          // so a stale row repairs itself while you look at this screen.
-          await syncProfile(session);
-          profile = await getProfile(user.id);
-        }
-        if (!active) return;
-        const finalRole = profile?.role ?? metadataRole ?? 'student';
-        setRole(finalRole);
-        setRoleLoading(false);
-      })();
-      return () => {
-        active = false;
-      };
-    }, [user, session])
-  );
 
   const isAndroid = Platform.OS === 'android';
 
   const openPicker = (target: EditTarget) => {
     setMessage(null);
-    setMessageError(false);
     setEditTarget(target);
     setEditingPart('date');
   };
@@ -135,66 +91,44 @@ export default function TeacherScreen() {
 
   const handleQuickEnd = (ms: number) => {
     setMessage(null);
-    setMessageError(false);
     setEndDate(new Date(startDate.getTime() + ms));
   };
 
-  const handleCreateEvent = async () => {
+  const handleCreateEvent = () => {
     const event = {
-      eventId: eventId.trim(),
+      event_code: eventId.trim(),
       title: title.trim(),
-      start: toLocalISO(startDate),
-      end: toLocalISO(endDate),
+      start_time: toLocalISO(startDate),
+      end_time: toLocalISO(endDate),
     };
 
-    if (!event.eventId || !event.title) {
+    if (!event.event_code || !event.title) {
       setMessage('Event title and code are required.');
-      setMessageError(true);
       return;
     }
 
     if (endDate.getTime() <= startDate.getTime()) {
       setMessage('End time must be after start time.');
-      setMessageError(true);
       return;
     }
 
-    try {
-      const { error } = await createEvent(event);
-      if (error) {
-        throw new Error(error);
-      }
-      setMessage('Event saved! Scan the QR with the Scan tab to test it.');
-      setMessageError(false);
-      setPayload(buildQRPayload(event));
-    } catch (err: any) {
-      setMessage(err?.message || 'Could not save the event.');
-      setMessageError(true);
-    }
+    createEvent(event)
+      .then(() => {
+        setMessage('Event saved! Scan the QR with the Scan tab to test it.');
+        setPayload(
+          JSON.stringify({
+            v: 1,
+            event: event.event_code,
+            title: event.title,
+            start: event.start_time,
+            end: event.end_time,
+          })
+        );
+      })
+      .catch(() => {
+        setMessage('Unable to save the event. Please try again.');
+      });
   };
-
-  if (roleLoading) {
-    return (
-      <View style={styles.gateContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.gateText}>Checking your account...</Text>
-      </View>
-    );
-  }
-
-  if (role !== 'teacher') {
-    return (
-      <View style={styles.gateContainer}>
-        <Ionicons
-          name="lock-closed-outline"
-          size={48}
-          color={COLORS.textSecondary}
-        />
-        <Text style={styles.gateTitle}>Teachers Only</Text>
-        <Text style={styles.gateText}>Only teacher accounts can create events.</Text>
-      </View>
-    );
-  }
 
   return (
     <ScrollView
@@ -252,11 +186,7 @@ export default function TeacherScreen() {
       </View>
       <Text style={styles.hint}>Tap a chip to set the end time from start.</Text>
 
-      {message && (
-        <Text style={[styles.message, messageError && styles.messageError]}>
-          {message}
-        </Text>
-      )}
+      {message && <Text style={styles.message}>{message}</Text>}
 
       <AppButton
         theme="primary"
@@ -314,25 +244,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-  },
-  gateContainer: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  gateTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-    marginTop: 12,
-  },
-  gateText: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    marginTop: 6,
   },
   content: {
     paddingHorizontal: 24,
@@ -418,9 +329,6 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     textAlign: 'center',
     marginTop: 12,
-  },
-  messageError: {
-    color: COLORS.danger,
   },
   resultCard: {
     backgroundColor: COLORS.card,
